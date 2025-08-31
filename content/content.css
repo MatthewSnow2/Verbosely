@@ -1,0 +1,294 @@
+/* Styles for Skool Quality Detector Extension */
+
+/* Quality Badge Styles */
+.skool-quality-badge {
+  display: inline-block !important;
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  margin-left: 6px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  vertical-align: middle !important;
+  font-size: 10px !important;
+  line-height: 16px !important;
+  text-align: center !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
+  z-index: 100 !important;
+  user-select: none !important;
+}
+
+.skool-quality-badge:hover {
+  transform: scale(1.15) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3) !important;
+  z-index: 101 !important;
+}
+
+/* Badge Categories */
+.skool-quality-badge[data-category="high"] {
+  background-color: #22c55e !important;
+  border-color: #16a34a !important;
+}
+
+.skool-quality-badge[data-category="moderate"] {
+  background-color: #eab308 !important;
+  border-color: #ca8a04 !important;
+}
+
+.skool-quality-badge[data-category="suspicious"] {
+  background-color: #ef4444 !important;
+  border-color: #dc2626 !important;
+}
+
+.skool-quality-badge[data-category="unknown"] {
+  background-color: #6b7280 !important;
+  border-color: #4b5563 !important;
+}
+
+/* Tooltip Styles */
+.skool-quality-tooltip {
+  position: absolute !important;
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%) !important;
+  color: #f9fafb !important;
+  padding: 14px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  z-index: 10000 !important;
+  max-width: 320px !important;
+  min-width: 250px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.15) !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  animation: tooltipFadeIn 0.2s ease-out forwards !important;
+  border: 1px solid rgba(75, 85, 99, 0.3) !important;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tooltip Header */
+.skool-quality-tooltip .tooltip-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 10px !important;
+  border-bottom: 1px solid rgba(75, 85, 99, 0.4) !important;
+  padding-bottom: 8px !important;
+}
+
+.skool-quality-tooltip .tooltip-header strong {
+  color: #f3f4f6 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  max-width: 160px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.skool-quality-tooltip .score {
+  font-weight: bold !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border-radius: 12px !important;
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.skool-quality-tooltip .tooltip-header .score[data-category="moderate"] {
+  background: rgba(234, 179, 8, 0.15) !important;
+  color: #facc15 !important;
+  border-color: rgba(234, 179, 8, 0.3) !important;
+}
+
+.skool-quality-tooltip .tooltip-header .score[data-category="suspicious"] {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Tooltip Body */
+.skool-quality-tooltip .tooltip-body p {
+  margin: 0 0 10px 0 !important;
+  color: #d1d5db !important;
+  line-height: 1.4 !important;
+  font-size: 12px !important;
+}
+
+/* Stats Section */
+.skool-quality-tooltip .stats {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 6px !important;
+  margin: 10px 0 !important;
+  font-size: 11px !important;
+  color: #9ca3af !important;
+}
+
+.skool-quality-tooltip .stats > div {
+  background: rgba(55, 65, 81, 0.5) !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(75, 85, 99, 0.2) !important;
+}
+
+/* Flags Section */
+.skool-quality-tooltip .flags {
+  margin-top: 10px !important;
+  padding: 6px 10px !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  color: #fca5a5 !important;
+  font-weight: 500 !important;
+}
+
+.skool-quality-tooltip .flags::before {
+  content: "⚠️ " !important;
+  margin-right: 4px !important;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .skool-quality-tooltip {
+    background: linear-gradient(135deg, #0f172a 0%, #020617 100%) !important;
+    border-color: rgba(51, 65, 85, 0.4) !important;
+  }
+  
+  .skool-quality-tooltip .tooltip-header {
+    border-bottom-color: rgba(51, 65, 85, 0.5) !important;
+  }
+  
+  .skool-quality-tooltip .stats > div {
+    background: rgba(30, 41, 59, 0.6) !important;
+    border-color: rgba(51, 65, 85, 0.3) !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .skool-quality-badge {
+    border-width: 2px !important;
+    font-weight: bold !important;
+  }
+  
+  .skool-quality-tooltip {
+    border-width: 2px !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6) !important;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .skool-quality-badge,
+  .skool-quality-tooltip {
+    transition: none !important;
+    animation: none !important;
+  }
+  
+  .skool-quality-badge:hover {
+    transform: none !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  .skool-quality-badge,
+  .skool-quality-tooltip {
+    display: none !important;
+  }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .skool-quality-badge {
+    width: 14px !important;
+    height: 14px !important;
+    font-size: 9px !important;
+    line-height: 14px !important;
+    margin-left: 4px !important;
+  }
+  
+  .skool-quality-tooltip {
+    max-width: calc(100vw - 20px) !important;
+    min-width: 200px !important;
+    font-size: 12px !important;
+    padding: 12px !important;
+  }
+  
+  .skool-quality-tooltip .stats {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+  }
+}
+
+/* Accessibility improvements */
+.skool-quality-badge:focus {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+.skool-quality-badge[aria-pressed="true"] {
+  transform: scale(0.95) !important;
+}
+
+/* Loading state */
+.skool-quality-badge.loading {
+  background: conic-gradient(from 0deg, transparent, #6b7280, transparent) !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error state */
+.skool-quality-badge.error {
+  background-color: #dc2626 !important;
+  border-color: #991b1b !important;
+}
+
+.skool-quality-badge.error::after {
+  content: "⚠" !important;
+  color: white !important;
+  font-size: 10px !important;
+}
+
+/* RTL support */
+[dir="rtl"] .skool-quality-badge {
+  margin-left: 0 !important;
+  margin-right: 6px !important;
+}
+
+/* Safari-specific fixes */
+@supports (-webkit-appearance: none) {
+  .skool-quality-badge {
+    -webkit-font-smoothing: antialiased !important;
+    -webkit-backface-visibility: hidden !important;
+  }
+}
+
+/* Firefox-specific fixes */
+@-moz-document url-prefix() {
+  .skool-quality-badge {
+    -moz-user-select: none !important;
+  }
+}

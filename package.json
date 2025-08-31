@@ -1,0 +1,64 @@
+{
+  "name": "skool-quality-detector",
+  "version": "1.0.0",
+  "description": "Chrome extension that analyzes Skool community member behavior to detect automation patterns and assess content quality",
+  "main": "manifest.json",
+  "scripts": {
+    "test": "echo 'Run test/test-extension.js in browser console on a Skool community page'",
+    "build": "echo 'Extension is ready for installation'",
+    "package": "zip -r skool-quality-detector.zip . -x '*.git*' 'node_modules/*' '*.DS_Store' 'test/*'",
+    "validate": "echo 'Check manifest.json and file structure'",
+    "lint": "echo 'No linting configured - add ESLint if needed'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/skool-quality-detector.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "skool",
+    "community",
+    "quality-detection",
+    "automation-detection",
+    "content-analysis",
+    "spam-detection",
+    "behavioral-analysis",
+    "community-management",
+    "manifest-v3"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/your-username/skool-quality-detector/issues"
+  },
+  "homepage": "https://github.com/your-username/skool-quality-detector#readme",
+  "engines": {
+    "chrome": ">=88"
+  },
+  "manifest": {
+    "version": "3",
+    "permissions": [
+      "storage",
+      "activeTab",
+      "tabs"
+    ],
+    "host_permissions": [
+      "https://*.skool.com/*"
+    ]
+  },
+  "devDependencies": {},
+  "dependencies": {},
+  "files": [
+    "manifest.json",
+    "popup/",
+    "content/",
+    "background/",
+    "utils/",
+    "icons/",
+    "README.md",
+    "PRIVACY.md",
+    "INSTALLATION.md",
+    "USER_GUIDE.md"
+  ],
+  "private": false
+}

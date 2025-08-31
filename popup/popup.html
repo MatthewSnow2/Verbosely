@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skool Quality Detector</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <span class="icon">🎯</span>
+                    Quality Detector
+                </h1>
+                <div class="status-indicator" id="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Navigation Tabs -->
+            <div class="tab-container">
+                <button class="tab-button active" data-tab="dashboard">Dashboard</button>
+                <button class="tab-button" data-tab="members">Members</button>
+                <button class="tab-button" data-tab="settings">Settings</button>
+            </div>
+
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="community-overview">
+                    <h2>Community Overview</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-number" id="total-members">-</div>
+                            <div class="stat-label">Members Analyzed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="high-quality">-</div>
+                            <div class="stat-label">High Quality</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="suspicious">-</div>
+                            <div class="stat-label">Suspicious</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="storage-size">-</div>
+                            <div class="stat-label">Storage (KB)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h3>Recent Analysis</h3>
+                    <div id="recent-activity-list" class="activity-list">
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <p>Loading recent activity...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <h3>Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button id="refresh-analysis" class="action-button primary">
+                            <span class="icon">🔄</span>
+                            Refresh Analysis
+                        </button>
+                        <button id="cleanup-data" class="action-button secondary">
+                            <span class="icon">🧹</span>
+                            Clean Up Data
+                        </button>
+                        <button id="export-data" class="action-button secondary">
+                            <span class="icon">📤</span>
+                            Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Members Tab -->
+            <div id="members-tab" class="tab-content">
+                <div class="search-container">
+                    <input type="text" id="member-search" placeholder="Search members..." class="search-input">
+                    <div class="filter-options">
+                        <select id="quality-filter" class="filter-select">
+                            <option value="all">All Qualities</option>
+                            <option value="high">High Quality</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="suspicious">Suspicious</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                        <select id="sort-filter" class="filter-select">
+                            <option value="recent">Most Recent</option>
+                            <option value="score-desc">Highest Score</option>
+                            <option value="score-asc">Lowest Score</option>
+                            <option value="posts-desc">Most Posts</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="members-list" class="members-list">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Loading member data...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <div class="settings-section">
+                    <h3>Analysis Settings</h3>
+                    
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="enable-analysis" class="setting-checkbox">
+                            <span class="setting-text">Enable quality analysis</span>
+                        </label>
+                        <p class="setting-description">Automatically analyze member behavior and content quality</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="enable-badges" class="setting-checkbox">
+                            <span class="setting-text">Show quality badges</span>
+                        </label>
+                        <p class="setting-description">Display quality indicators next to member names</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="enable-tooltips" class="setting-checkbox">
+                            <span class="setting-text">Show detailed tooltips</span>
+                        </label>
+                        <p class="setting-description">Display detailed analysis on hover</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="show-confidence" class="setting-checkbox">
+                            <span class="setting-text">Show confidence levels</span>
+                        </label>
+                        <p class="setting-description">Display confidence percentage in analysis</p>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Privacy Settings</h3>
+                    
+                    <div class="setting-group">
+                        <label class="setting-label">
+                            <input type="checkbox" id="privacy-mode" class="setting-checkbox">
+                            <span class="setting-text">Privacy mode</span>
+                        </label>
+                        <p class="setting-description">Minimize data collection and analysis</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="confidence-threshold" class="setting-label">
+                            <span class="setting-text">Minimum confidence threshold</span>
+                        </label>
+                        <input type="range" id="confidence-threshold" min="0" max="100" class="setting-range">
+                        <div class="range-value" id="confidence-value">30%</div>
+                        <p class="setting-description">Only show badges with this confidence level or higher</p>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Data Management</h3>
+                    
+                    <div class="data-info">
+                        <div class="data-stat">
+                            <span class="data-label">Storage used:</span>
+                            <span class="data-value" id="storage-usage">Loading...</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-label">Members tracked:</span>
+                            <span class="data-value" id="members-tracked">Loading...</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-label">Last cleanup:</span>
+                            <span class="data-value" id="last-cleanup">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="data-actions">
+                        <button id="clear-all-data" class="action-button danger">
+                            <span class="icon">🗑️</span>
+                            Clear All Data
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <div class="about-info">
+                        <p>Skool Community Quality Detector v1.0.0</p>
+                        <p>Helps maintain community integrity through behavioral analysis</p>
+                        <div class="about-links">
+                            <button id="view-help" class="link-button">Help & Documentation</button>
+                            <button id="report-issue" class="link-button">Report Issue</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Modal for member details -->
+        <div id="member-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modal-member-name">Member Details</h2>
+                    <button id="close-modal" class="close-button">&times;</button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast notifications -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
