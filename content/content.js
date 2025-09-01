@@ -610,16 +610,126 @@ class SkoolContentAnalyzer {
   }
 }
 
+// Message handler for background script communication
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  try {
+    switch (message.action) {
+      case 'ping':
+        sendResponse({ success: true, status: 'Content script active' });
+        break;
+        
+      case 'refreshAnalysis':
+        if (skoolAnalyzer_instance) {
+          // Refresh analysis for current page
+          skoolAnalyzer_instance.processExistingContent();
+          sendResponse({ success: true, status: 'Analysis refreshed' });
+        } else {
+          sendResponse({ success: false, error: 'Content analyzer not initialized' });
+        }
+        break;
+        
+      case 'settingsChanged':
+        if (skoolAnalyzer_instance && message.settings) {
+          skoolAnalyzer_instance.settings = message.settings;
+          // Re-process existing content with new settings
+          skoolAnalyzer_instance.processExistingContent();
+          sendResponse({ success: true, status: 'Settings updated' });
+        } else {
+          sendResponse({ success: false, error: 'Cannot update settings' });
+        }
+        break;
+        
+      case 'getStatus':
+        sendResponse({ 
+          success: true, 
+          status: skoolAnalyzer_instance ? 'initialized' : 'not initialized',
+          isSkoolPage: window.location.hostname.includes('skool.com')
+        });
+        break;
+        
+      default:
+        sendResponse({ success: false, error: 'Unknown action' });
+    }
+  } catch (error) {
+    console.error('Error in content script message handler:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+  
+  return true; // Keep message channel open for async responses
+});
+
 // Initialize when page loads
 let skoolAnalyzer_instance = null;
 
+function initializeAnalyzer() {
+  try {
+    if (typeof SkoolContentAnalyzer !== 'undefined') {
+      skoolAnalyzer_instance = new SkoolContentAnalyzer();
+      console.log('Skool Quality Detector: Content analyzer initialized');
+    } else {
+      console.warn('Skool Quality Detector: SkoolContentAnalyzer class not available');
+    }
+  } catch (error) {
+    console.error('Skool Quality Detector: Error initializing content analyzer:', error);
+  }
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    skoolAnalyzer_instance = new SkoolContentAnalyzer();
-  });
+  document.addEventListener('DOMContentLoaded', initializeAnalyzer);
 } else {
-  skoolAnalyzer_instance = new SkoolContentAnalyzer();
+  initializeAnalyzer();
 }
 
 // Make instance available globally for debugging
 window.skoolContentAnalyzer = skoolAnalyzer_instance;
+
+// Message listener for background script communication
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  try {
+    switch (message.action) {
+      case 'ping':
+        sendResponse({ success: true, status: 'content script active' });
+        break;
+        
+      case 'refreshAnalysis':
+        if (skoolAnalyzer_instance) {
+          // Re-process existing content
+          skoolAnalyzer_instance.processExistingContent();
+          sendResponse({ success: true, message: 'Analysis refreshed' });
+        } else {
+          sendResponse({ success: false, error: 'Content analyzer not initialized' });
+        }
+        break;
+        
+      case 'settingsChanged':
+        if (skoolAnalyzer_instance) {
+          skoolAnalyzer_instance.settings = message.settings;
+          // Optionally refresh display based on new settings
+          if (message.settings.analysisEnabled) {
+            skoolAnalyzer_instance.processExistingContent();
+          }
+          sendResponse({ success: true, message: 'Settings updated' });
+        } else {
+          sendResponse({ success: false, error: 'Content analyzer not initialized' });
+        }
+        break;
+        
+      case 'getStatus':
+        sendResponse({ 
+          success: true, 
+          initialized: !!skoolAnalyzer_instance,
+          observedMembers: skoolAnalyzer_instance?.observedMembers?.size || 0,
+          url: window.location.href
+        });
+        break;
+        
+      default:
+        sendResponse({ success: false, error: 'Unknown action: ' + message.action });
+    }
+  } catch (error) {
+    console.error('Content script message handler error:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+  
+  return true; // Indicate async response
+});

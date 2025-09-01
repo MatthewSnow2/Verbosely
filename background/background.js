@@ -464,27 +464,77 @@ class SkoolBackgroundManager {
   // Ensure content script is injected
   async ensureContentScriptInjected(tabId) {
     try {
+      // Check if scripting API is available
+      if (!chrome.scripting) {
+        console.error('Chrome scripting API not available. Check manifest permissions.');
+        return;
+      }
+
       // Try to ping the content script
       await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+      console.log(`Content script already active on tab ${tabId}`);
     } catch (error) {
       // Content script not present, inject it
+      console.log(`Content script not found on tab ${tabId}, injecting...`);
       try {
+        // Get tab info first to verify it's a valid Skool page
+        const tab = await chrome.tabs.get(tabId);
+        if (!tab.url || !tab.url.includes('skool.com')) {
+          console.log('Tab is not on Skool domain, skipping injection');
+          return;
+        }
+
+        // Inject utility scripts first
         await chrome.scripting.executeScript({
           target: { tabId },
-          files: [
-            'utils/constants.js',
-            'utils/storage.js',
-            'utils/analyzer.js',
-            'content/content.js'
-          ]
+          files: ['utils/constants.js']
         });
 
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['utils/storage.js']
+        });
+
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['utils/analyzer.js']
+        });
+
+        // Inject main content script
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content/content.js']
+        });
+
+        // Inject CSS
         await chrome.scripting.insertCSS({
           target: { tabId },
           files: ['content/content.css']
         });
+
+        console.log(`Content script successfully injected into tab ${tabId}`);
+
+        // Verify injection worked by pinging again
+        setTimeout(async () => {
+          try {
+            await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+            console.log(`Content script ping successful after injection on tab ${tabId}`);
+          } catch (pingError) {
+            console.warn(`Content script ping failed after injection on tab ${tabId}:`, pingError);
+          }
+        }, 1000);
+
       } catch (injectionError) {
         console.error('Error injecting content script:', injectionError);
+        
+        // Log specific error details for debugging
+        if (injectionError.message.includes('Cannot access contents of url')) {
+          console.error('Injection failed: Insufficient permissions for URL');
+        } else if (injectionError.message.includes('chrome-extension://')) {
+          console.error('Injection failed: Cannot inject into extension pages');
+        } else if (injectionError.message.includes('The tab was closed')) {
+          console.error('Injection failed: Tab was closed during injection');
+        }
       }
     }
   }
