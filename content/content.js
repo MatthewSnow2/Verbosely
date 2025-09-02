@@ -13,17 +13,44 @@ class SkoolContentAnalyzer {
 
   async initialize() {
     try {
+      console.log('✅ Skool Quality Detector - Content Script Loaded!');
+      
+      // Mark that extension is loaded
+      window.SKOOL_EXTENSION_LOADED = true;
+      
+      // Check if we're on a Skool page
+      if (!window.location.hostname.includes('skool.com')) {
+        console.log('Skool Quality Detector: Not on a Skool page, skipping initialization');
+        return;
+      }
+      
+      // Set up message listener for popup communication
+      chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === 'refreshAnalysis') {
+          this.refreshAnalysis();
+          sendResponse({ status: 'success' });
+        } else if (request.action === 'ping') {
+          sendResponse({ status: 'alive', initialized: this.isInitialized });
+        }
+        return true;
+      });
+      
       this.settings = await skoolStorage.getSettings();
+      console.log('Skool Quality Detector: Settings loaded:', this.settings);
       
       if (this.settings.analysisEnabled) {
         this.startObservation();
         this.createBadgeContainer();
-        console.log('Skool Quality Detector: Initialized');
+        console.log('Skool Quality Detector: Analysis started, badges enabled');
+      } else {
+        console.log('Skool Quality Detector: Analysis disabled in settings');
       }
       
       this.isInitialized = true;
+      console.log('Skool Quality Detector: Initialized successfully');
     } catch (error) {
       console.error('Skool Quality Detector: Failed to initialize', error);
+      console.error('Error details:', error.stack);
     }
   }
 
@@ -50,8 +77,46 @@ class SkoolContentAnalyzer {
 
   // Process existing content on page
   processExistingContent() {
+    console.log('Skool Quality Detector: Processing existing content...');
     const posts = this.findPosts();
-    posts.forEach(post => this.processPost(post));
+    console.log(`Skool Quality Detector: Found ${posts.length} posts to process`);
+    
+    if (posts.length === 0) {
+      console.log('Skool Quality Detector: No posts found. Checking DOM structure...');
+      this.debugDOMStructure();
+    }
+    
+    posts.forEach((post, index) => {
+      console.log(`Processing post ${index + 1}/${posts.length}`);
+      this.processPost(post);
+    });
+  }
+  
+  // Debug DOM structure to understand Skool's layout
+  debugDOMStructure() {
+    console.log('DOM Structure Debug:');
+    console.log('- Current URL:', window.location.href);
+    console.log('- Page title:', document.title);
+    
+    // Check for common post-like elements
+    const potentialPosts = [
+      'article',
+      '[class*="post"]',
+      '[class*="feed"]', 
+      '[class*="item"]',
+      '[data-testid]',
+      '[role="article"]'
+    ];
+    
+    potentialPosts.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        console.log(`- Found ${elements.length} elements matching "${selector}"`);
+        Array.from(elements).slice(0, 2).forEach((el, i) => {
+          console.log(`  Example ${i + 1}:`, el.className, el.outerHTML.substring(0, 150));
+        });
+      }
+    });
   }
 
   // Handle DOM mutations
@@ -70,21 +135,252 @@ class SkoolContentAnalyzer {
   // Process newly added elements
   processNewElement(element) {
     // Check if element is or contains posts
-    const posts = element.matches && element.matches(this.getPostSelector()) 
-      ? [element] 
-      : element.querySelectorAll ? Array.from(element.querySelectorAll(this.getPostSelector())) : [];
+    let posts = [];
+    
+    // First check if the element itself is a post
+    for (const selector of SKOOL_SELECTORS.posts) {
+      try {
+        if (element.matches && element.matches(selector)) {
+          posts = [element];
+          break;
+        }
+      } catch (error) {
+        // Selector not supported, continue
+      }
+    }
+    
+    // If element is not a post itself, look for posts inside it
+    if (posts.length === 0 && element.querySelectorAll) {
+      for (const selector of SKOOL_SELECTORS.posts) {
+        try {
+          const foundPosts = element.querySelectorAll(selector);
+          if (foundPosts.length > 0) {
+            posts = Array.from(foundPosts);
+            break;
+          }
+        } catch (error) {
+          // Selector not supported, continue
+        }
+      }
+    }
     
     posts.forEach(post => this.processPost(post));
   }
 
-  // Get post selector based on common Skool patterns
-  getPostSelector() {
-    return SKOOL_SELECTORS.posts;
+  // Find posts using progressive selector strategy
+  findPosts() {
+    console.log('Skool Quality Detector: Starting post detection...');
+    
+    // First try simple selectors
+    const simpleStrategies = [
+      '[data-testid*="post"]',
+      'article', 
+      '[role="article"]',
+      'div[class*="post"]',
+      'div[class*="feed"]',
+      'li[class*="feed"]',
+      '.post-item', 
+      '.feed-item'
+    ];
+    
+    let foundPosts = [];
+    
+    // Try simple selectors first
+    for (const selector of simpleStrategies) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          foundPosts = Array.from(elements);
+          console.log(`✅ Found ${foundPosts.length} posts using selector: "${selector}"`);
+          this.lastSuccessfulPostSelector = selector;
+          break;
+        }
+      } catch (error) {
+        console.warn(`⚠️ Simple selector failed: "${selector}"`, error);
+      }
+    }
+    
+    // If no posts found with simple selectors, try complex approach
+    if (foundPosts.length === 0) {
+      console.log('🔍 No posts with simple selectors, trying advanced detection...');
+      foundPosts = this.findPostsAdvanced();
+    }
+    
+    if (foundPosts.length === 0) {
+      console.warn('❌ No posts found with any selector. Analyzing page structure...');
+      this.debugNoPostsFound();
+    }
+    
+    return foundPosts;
+  }
+  
+  // Advanced post detection that manually searches for containers with user links
+  findPostsAdvanced() {
+    console.log('🔍 Advanced post detection starting...');
+    const candidatePosts = [];
+    
+    // Look for any div/li that contains user profile links (/@username)
+    const userLinks = document.querySelectorAll('a[href*="/@"]');
+    console.log(`Found ${userLinks.length} user profile links`);
+    
+    userLinks.forEach(link => {
+      // Walk up the DOM to find a reasonable container
+      let container = link.parentElement;
+      let depth = 0;
+      
+      while (container && depth < 5) {
+        // Check if this container looks like a post
+        if (this.isPostContainer(container)) {
+          // Avoid duplicates
+          if (!candidatePosts.includes(container)) {
+            candidatePosts.push(container);
+            console.log(`📝 Found post container via user link: ${link.textContent.trim()}`);
+          }
+          break;
+        }
+        container = container.parentElement;
+        depth++;
+      }
+    });
+    
+    console.log(`✅ Advanced detection found ${candidatePosts.length} potential posts`);
+    return candidatePosts;
+  }
+  
+  // Check if an element looks like a post container
+  isPostContainer(element) {
+    if (!element || element === document.body || element === document.html) return false;
+    
+    // Must have some text content
+    const textContent = element.textContent?.trim() || '';
+    if (textContent.length < 20) return false;
+    
+    // Should contain a user link
+    const hasUserLink = element.querySelector('a[href*="/@"]') !== null;
+    if (!hasUserLink) return false;
+    
+    // Should have reasonable size (not tiny UI elements)
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 100 || rect.height < 50) return false;
+    
+    // Common post indicators
+    const tagName = element.tagName.toLowerCase();
+    const className = element.className || '';
+    
+    // Prefer elements that look post-like
+    const postIndicators = [
+      tagName === 'article',
+      tagName === 'li',
+      className.includes('post'),
+      className.includes('feed'),
+      className.includes('item'),
+      element.querySelector('button'), // Posts often have interaction buttons
+      element.querySelector('time'), // Posts often have timestamps
+    ];
+    
+    const hasPostIndicators = postIndicators.filter(Boolean).length > 0;
+    
+    console.log(`🔍 Container analysis: ${tagName}.${className} - text:${textContent.length}ch, hasUserLink:${hasUserLink}, indicators:${hasPostIndicators}`);
+    
+    return hasPostIndicators;
+  }
+  
+  // Advanced author detection when selectors fail
+  findAuthorAdvanced(postElement) {
+    console.log('🔍 Advanced author detection starting...');
+    
+    // Look for user profile links first (most reliable)
+    const userLinks = postElement.querySelectorAll('a[href*="/@"]');
+    if (userLinks.length > 0) {
+      // Find the most likely author link (usually first one or one with name-like text)
+      for (const link of userLinks) {
+        const text = link.textContent.trim();
+        if (text && text.length > 0 && text.length < 50) {
+          console.log(`📝 Found author via profile link: ${text}`);
+          return link;
+        }
+      }
+      // Fallback to first user link even if no good text
+      console.log('📝 Using first profile link as author');
+      return userLinks[0];
+    }
+    
+    // Look for any clickable text that could be an author
+    const clickableElements = postElement.querySelectorAll('a, button, span[onclick], div[onclick]');
+    for (const element of clickableElements) {
+      const text = element.textContent.trim();
+      if (text && text.length > 2 && text.length < 30) {
+        // Check if it looks like a username (no spaces, or reasonable name)
+        if (!text.includes('\n') && (text.split(' ').length <= 2)) {
+          console.log(`📝 Found potential author via clickable element: ${text}`);
+          return element;
+        }
+      }
+    }
+    
+    // Look for strong/bold text that might be usernames
+    const strongElements = postElement.querySelectorAll('strong, b, h1, h2, h3, h4, h5, h6');
+    for (const element of strongElements) {
+      const text = element.textContent.trim();
+      if (text && text.length > 2 && text.length < 30 && !text.includes('\n')) {
+        console.log(`📝 Found potential author via strong text: ${text}`);
+        return element;
+      }
+    }
+    
+    console.log('❌ Advanced author detection failed');
+    return null;
   }
 
-  // Find all posts on current page
-  findPosts() {
-    return Array.from(document.querySelectorAll(this.getPostSelector()));
+  // Debug when no posts are found
+  debugNoPostsFound() {
+    const debugInfo = {
+      url: window.location.href,
+      totalElements: document.querySelectorAll('*').length,
+      articles: document.querySelectorAll('article').length,
+      divs: document.querySelectorAll('div').length,
+      lists: document.querySelectorAll('li').length,
+      profileLinks: document.querySelectorAll('a[href*="/@"]').length,
+      hasReactRoot: !!document.querySelector('#__next, [data-reactroot]'),
+      pageType: this.detectPageType()
+    };
+    
+    console.log('🔍 Debug Info for Empty Posts:', debugInfo);
+    
+    // Show user-friendly message based on page type
+    if (debugInfo.pageType === 'about') {
+      this.showUserMessage('info', 'Navigate to the community feed to analyze posts');
+    } else if (debugInfo.pageType === 'login') {
+      this.showUserMessage('warning', 'Please log in to access community content');  
+    } else if (debugInfo.profileLinks > 0) {
+      this.showUserMessage('info', `Found ${debugInfo.profileLinks} members, but no posts detected. This might be a member-only area.`);
+    }
+  }
+
+  // Detect what type of Skool page we're on
+  detectPageType() {
+    const url = window.location.href;
+    if (url.includes('/about')) return 'about';
+    if (url.includes('/members')) return 'members';
+    if (url.includes('/calendar')) return 'calendar';
+    if (document.querySelector('input[type="password"]')) return 'login';
+    if (document.querySelector('form[action*="login"]')) return 'login';
+    return 'community';
+  }
+
+  // Show message to user (will be displayed in popup)
+  showUserMessage(type, message) {
+    // Store message for popup to display
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({
+        'skool_detector_last_message': {
+          type,
+          message,
+          timestamp: Date.now(),
+          url: window.location.href
+        }
+      });
+    }
   }
 
   // Process individual post
@@ -107,24 +403,54 @@ class SkoolContentAnalyzer {
     }
   }
 
+  // Helper method to find element using array of selectors
+  findElementWithSelectors(parentElement, selectorArray) {
+    for (const selector of selectorArray) {
+      try {
+        const element = parentElement.querySelector(selector);
+        if (element) return element;
+      } catch (error) {
+        console.warn(`Selector failed: "${selector}"`, error);
+      }
+    }
+    return null;
+  }
+
   // Extract member data from post element
   extractMemberDataFromPost(postElement) {
     try {
-      // Extract author information
-      const authorElement = postElement.querySelector(SKOOL_SELECTORS.postAuthor);
-      if (!authorElement) return null;
+      // First, try to find author using progressive selectors
+      let authorElement = this.findElementWithSelectors(postElement, SKOOL_SELECTORS.postAuthor);
+      
+      // If no author found with selectors, try advanced detection
+      if (!authorElement) {
+        console.log('🔍 No author found with selectors, trying advanced detection...');
+        authorElement = this.findAuthorAdvanced(postElement);
+      }
+      
+      if (!authorElement) {
+        console.warn('❌ No author element found in post after all attempts');
+        console.log('Post element:', postElement);
+        console.log('Post HTML sample:', postElement.outerHTML.substring(0, 200) + '...');
+        return null;
+      }
       
       const username = this.extractUsername(authorElement);
       const userId = this.generateUserId(username, authorElement);
       
-      if (!username || !userId) return null;
+      if (!username || !userId) {
+        console.warn('Failed to extract username/userId:', { username, userId, authorElement });
+        return null;
+      }
       
-      // Extract post content
-      const contentElement = postElement.querySelector(SKOOL_SELECTORS.postContent);
-      const content = contentElement ? contentElement.textContent.trim() : '';
+      console.log(`✅ Found member: ${username} (${userId})`);
       
-      // Extract timestamp
-      const timestampElement = postElement.querySelector(SKOOL_SELECTORS.postTimestamp);
+      // Extract post content using progressive selectors
+      const contentElement = this.findElementWithSelectors(postElement, SKOOL_SELECTORS.postContent);
+      const content = contentElement ? contentElement.textContent.trim() : postElement.textContent.trim();
+      
+      // Extract timestamp using progressive selectors
+      const timestampElement = this.findElementWithSelectors(postElement, SKOOL_SELECTORS.postTimestamp);
       const timestamp = this.extractTimestamp(timestampElement);
       
       // Extract engagement data
@@ -160,35 +486,116 @@ class SkoolContentAnalyzer {
 
   // Extract username from author element
   extractUsername(authorElement) {
-    // Try multiple approaches to find username
-    const usernameText = 
-      authorElement.textContent?.trim() ||
-      authorElement.getAttribute('title') ||
-      authorElement.getAttribute('alt') ||
-      authorElement.querySelector('.username')?.textContent ||
-      authorElement.querySelector('.display-name')?.textContent ||
-      authorElement.querySelector('[data-testid*="name"]')?.textContent;
+    console.log('🔍 Extracting username from element:', authorElement);
     
-    return usernameText ? usernameText.trim() : null;
+    // Try multiple approaches to find username
+    let usernameText = null;
+    
+    // First try text content
+    if (authorElement.textContent && authorElement.textContent.trim()) {
+      usernameText = authorElement.textContent.trim();
+      console.log('📝 Username from textContent:', usernameText);
+    }
+    
+    // Try attributes if no text content
+    if (!usernameText) {
+      usernameText = authorElement.getAttribute('title') ||
+                     authorElement.getAttribute('alt') ||
+                     authorElement.getAttribute('aria-label');
+      if (usernameText) {
+        console.log('📝 Username from attributes:', usernameText);
+      }
+    }
+    
+    // Try child elements
+    if (!usernameText) {
+      const childSelectors = [
+        '.username',
+        '.display-name',
+        '.user-name',
+        '[data-testid*="name"]',
+        'span',
+        'strong',
+        'b'
+      ];
+      
+      for (const selector of childSelectors) {
+        const child = authorElement.querySelector(selector);
+        if (child && child.textContent && child.textContent.trim()) {
+          usernameText = child.textContent.trim();
+          console.log(`📝 Username from child ${selector}:`, usernameText);
+          break;
+        }
+      }
+    }
+    
+    // Extract username from href if it's a user profile link
+    if (!usernameText && authorElement.href && authorElement.href.includes('/@')) {
+      const match = authorElement.href.match(/@([^/?#]+)/);
+      if (match) {
+        usernameText = match[1];
+        console.log('📝 Username from href:', usernameText);
+      }
+    }
+    
+    // Clean up the username
+    if (usernameText) {
+      // Remove extra whitespace and newlines
+      usernameText = usernameText.replace(/\s+/g, ' ').trim();
+      
+      // If it's too long or has weird characters, it's probably not a username
+      if (usernameText.length > 50 || usernameText.includes('\n')) {
+        console.warn('❌ Username too long or contains newlines, rejecting:', usernameText);
+        return null;
+      }
+      
+      console.log('✅ Final username:', usernameText);
+      return usernameText;
+    }
+    
+    console.warn('❌ No username found in element');
+    return null;
   }
 
   // Generate unique user ID
   generateUserId(username, authorElement) {
+    console.log('🔍 Generating userId for:', username, authorElement);
+    
+    if (!username && !authorElement) {
+      console.warn('❌ No username or author element provided');
+      return null;
+    }
+    
     // Try to find a data attribute with user ID
     const dataId = authorElement.getAttribute('data-user-id') ||
                    authorElement.getAttribute('data-member-id') ||
                    authorElement.closest('[data-user-id]')?.getAttribute('data-user-id');
     
-    if (dataId) return dataId;
+    if (dataId) {
+      console.log('✅ Found data ID:', dataId);
+      return dataId;
+    }
     
     // Fallback to hash of username + href if available
     const profileLink = authorElement.href || authorElement.querySelector('a')?.href;
     if (profileLink) {
-      return this.hashString(profileLink);
+      const userId = this.hashString(profileLink);
+      console.log('✅ Generated userId from profile link:', userId);
+      return userId;
     }
     
-    // Final fallback to username hash
-    return this.hashString(username);
+    // Final fallback to username hash (if we have a username)
+    if (username) {
+      const userId = this.hashString(username);
+      console.log('✅ Generated userId from username hash:', userId);
+      return userId;
+    }
+    
+    // Last resort: generate from element HTML
+    const elementSignature = authorElement.outerHTML.substring(0, 100);
+    const userId = this.hashString(elementSignature);
+    console.log('✅ Generated userId from element signature:', userId);
+    return userId;
   }
 
   // Generate post ID
@@ -608,55 +1015,20 @@ class SkoolContentAnalyzer {
       });
     }
   }
+  
+  // Refresh analysis method for popup communication
+  refreshAnalysis() {
+    console.log('Skool Quality Detector: Refreshing analysis...');
+    // Clear existing badges
+    const existingBadges = document.querySelectorAll('.skool-quality-badge');
+    existingBadges.forEach(badge => badge.remove());
+    
+    // Re-process existing content
+    this.processExistingContent();
+    console.log('Skool Quality Detector: Analysis refreshed');
+  }
 }
 
-// Message handler for background script communication
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  try {
-    switch (message.action) {
-      case 'ping':
-        sendResponse({ success: true, status: 'Content script active' });
-        break;
-        
-      case 'refreshAnalysis':
-        if (skoolAnalyzer_instance) {
-          // Refresh analysis for current page
-          skoolAnalyzer_instance.processExistingContent();
-          sendResponse({ success: true, status: 'Analysis refreshed' });
-        } else {
-          sendResponse({ success: false, error: 'Content analyzer not initialized' });
-        }
-        break;
-        
-      case 'settingsChanged':
-        if (skoolAnalyzer_instance && message.settings) {
-          skoolAnalyzer_instance.settings = message.settings;
-          // Re-process existing content with new settings
-          skoolAnalyzer_instance.processExistingContent();
-          sendResponse({ success: true, status: 'Settings updated' });
-        } else {
-          sendResponse({ success: false, error: 'Cannot update settings' });
-        }
-        break;
-        
-      case 'getStatus':
-        sendResponse({ 
-          success: true, 
-          status: skoolAnalyzer_instance ? 'initialized' : 'not initialized',
-          isSkoolPage: window.location.hostname.includes('skool.com')
-        });
-        break;
-        
-      default:
-        sendResponse({ success: false, error: 'Unknown action' });
-    }
-  } catch (error) {
-    console.error('Error in content script message handler:', error);
-    sendResponse({ success: false, error: error.message });
-  }
-  
-  return true; // Keep message channel open for async responses
-});
 
 // Initialize when page loads
 let skoolAnalyzer_instance = null;
@@ -683,53 +1055,93 @@ if (document.readyState === 'loading') {
 // Make instance available globally for debugging
 window.skoolContentAnalyzer = skoolAnalyzer_instance;
 
-// Message listener for background script communication
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  try {
-    switch (message.action) {
-      case 'ping':
-        sendResponse({ success: true, status: 'content script active' });
-        break;
-        
-      case 'refreshAnalysis':
-        if (skoolAnalyzer_instance) {
-          // Re-process existing content
-          skoolAnalyzer_instance.processExistingContent();
-          sendResponse({ success: true, message: 'Analysis refreshed' });
-        } else {
-          sendResponse({ success: false, error: 'Content analyzer not initialized' });
-        }
-        break;
-        
-      case 'settingsChanged':
-        if (skoolAnalyzer_instance) {
-          skoolAnalyzer_instance.settings = message.settings;
-          // Optionally refresh display based on new settings
-          if (message.settings.analysisEnabled) {
-            skoolAnalyzer_instance.processExistingContent();
-          }
-          sendResponse({ success: true, message: 'Settings updated' });
-        } else {
-          sendResponse({ success: false, error: 'Content analyzer not initialized' });
-        }
-        break;
-        
-      case 'getStatus':
-        sendResponse({ 
-          success: true, 
-          initialized: !!skoolAnalyzer_instance,
-          observedMembers: skoolAnalyzer_instance?.observedMembers?.size || 0,
-          url: window.location.href
-        });
-        break;
-        
-      default:
-        sendResponse({ success: false, error: 'Unknown action: ' + message.action });
-    }
-  } catch (error) {
-    console.error('Content script message handler error:', error);
-    sendResponse({ success: false, error: error.message });
-  }
+// Debugging functions
+window.debugSkoolExtension = {
+  checkInit: () => {
+    console.log('Extension Initialization Check:');
+    console.log('- skoolAnalyzer_instance:', !!skoolAnalyzer_instance);
+    console.log('- Settings loaded:', skoolAnalyzer_instance?.settings);
+    console.log('- Analysis enabled:', skoolAnalyzer_instance?.settings?.analysisEnabled);
+    console.log('- Is initialized:', skoolAnalyzer_instance?.isInitialized);
+    console.log('- Observed members:', skoolAnalyzer_instance?.observedMembers?.size || 0);
+  },
   
-  return true; // Indicate async response
+  checkSelectors: () => {
+    console.log('DOM Selector Check:');
+    console.log('- Posts found:', document.querySelectorAll(SKOOL_SELECTORS.posts).length);
+    console.log('- Post authors found:', document.querySelectorAll(SKOOL_SELECTORS.postAuthor).length);
+    console.log('- Post content found:', document.querySelectorAll(SKOOL_SELECTORS.postContent).length);
+    
+    // Show actual DOM structure
+    console.log('- Sample post elements:');
+    const posts = document.querySelectorAll('[class*="post"], [class*="feed"], [data-testid*="post"]');
+    Array.from(posts).slice(0, 3).forEach((post, index) => {
+      console.log(`  Post ${index + 1}:`, post.className, post.outerHTML.slice(0, 200));
+    });
+  },
+  
+  testPostProcessing: () => {
+    console.log('Testing Post Processing:');
+    if (skoolAnalyzer_instance) {
+      const posts = skoolAnalyzer_instance.findPosts();
+      console.log('- Posts found by analyzer:', posts.length);
+      
+      if (posts.length > 0) {
+        console.log('- Testing first post extraction...');
+        const memberData = skoolAnalyzer_instance.extractMemberDataFromPost(posts[0]);
+        console.log('- Extracted member data:', memberData);
+      }
+    } else {
+      console.log('- Analyzer not initialized');
+    }
+  },
+  
+  checkStorage: async () => {
+    console.log('Storage Check:');
+    try {
+      const allData = await skoolStorage.getAllMemberData();
+      console.log('- All member data count:', Object.keys(allData).length);
+      console.log('- Storage stats:', await skoolStorage.getStorageStats());
+      console.log('- Settings:', await skoolStorage.getSettings());
+    } catch (error) {
+      console.error('- Storage error:', error);
+    }
+  },
+  
+  simulatePost: () => {
+    console.log('Creating test post for debugging...');
+    const testPost = {
+      userId: 'test-user-123',
+      username: 'TestUser',
+      posts: [{
+        id: 'test-post-1',
+        content: 'This is a test post to check if the analyzer is working properly. What do you think about this approach?',
+        timestamp: new Date().toISOString(),
+        length: 95,
+        hasLinks: false,
+        hasImages: false,
+        engagement: { likes: 5, comments: 2, shares: 0 }
+      }],
+      engagement: { totalComments: 2, totalLikes: 5, totalShares: 0 },
+      lastSeen: Date.now()
+    };
+    
+    if (skoolAnalyzer_instance) {
+      skoolAnalyzer_instance.updateMemberData(testPost);
+      console.log('- Test post created and stored');
+    }
+  }
+};
+
+// Global message listener for debugging
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getStatus') {
+    sendResponse({ 
+      success: true, 
+      initialized: !!skoolAnalyzer_instance,
+      observedMembers: skoolAnalyzer_instance?.observedMembers?.size || 0,
+      url: window.location.href
+    });
+  }
+  return true;
 });

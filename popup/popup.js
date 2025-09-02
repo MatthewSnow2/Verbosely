@@ -161,16 +161,26 @@ class SkoolPopupManager {
     });
 
     // Member search and filtering
-    document.getElementById('member-search')?.addEventListener('input', (e) => {
-      this.filterMembers(e.target.value);
+    document.getElementById('search-go-button')?.addEventListener('click', () => {
+      this.performMemberSearch();
     });
 
-    document.getElementById('quality-filter')?.addEventListener('change', (e) => {
-      this.filterMembersByQuality(e.target.value);
+    document.getElementById('member-search')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.performMemberSearch();
+      }
     });
 
-    document.getElementById('sort-filter')?.addEventListener('change', (e) => {
-      this.sortMembers(e.target.value);
+    document.getElementById('quality-filter')?.addEventListener('change', () => {
+      this.updateMembersList();
+    });
+
+    document.getElementById('sort-filter')?.addEventListener('change', () => {
+      this.updateMembersList();
+    });
+
+    document.getElementById('timeframe-filter')?.addEventListener('change', () => {
+      this.updateMembersList();
     });
 
     // Settings
@@ -235,18 +245,48 @@ class SkoolPopupManager {
   }
 
   // Update status indicator
-  updateStatus() {
+  async updateStatus() {
     const statusIndicator = document.getElementById('status-indicator');
     const statusDot = statusIndicator?.querySelector('.status-dot');
     const statusText = statusIndicator?.querySelector('.status-text');
 
     if (statusDot && statusText) {
-      if (this.settings.analysisEnabled) {
-        statusDot.className = 'status-dot';
-        statusText.textContent = 'Active';
-      } else {
+      // Check if we have any detected members
+      const hasMemberData = this.stats.totalMembers > 0;
+      
+      // Check for content script messages
+      let lastMessage = null;
+      try {
+        const result = await chrome.storage.local.get('skool_detector_last_message');
+        lastMessage = result.skool_detector_last_message;
+      } catch (error) {
+        console.error('Failed to get last message:', error);
+      }
+      
+      if (!this.settings.analysisEnabled) {
         statusDot.className = 'status-dot inactive';
         statusText.textContent = 'Disabled';
+      } else if (hasMemberData) {
+        statusDot.className = 'status-dot active';
+        statusText.textContent = 'Active - Found Data';
+      } else if (lastMessage && (Date.now() - lastMessage.timestamp) < 30000) {
+        // Show recent message from content script
+        if (lastMessage.type === 'warning') {
+          statusDot.className = 'status-dot warning';
+          statusText.textContent = 'Needs Login';
+        } else if (lastMessage.type === 'info') {
+          statusDot.className = 'status-dot warning';
+          statusText.textContent = 'Wrong Page Type';
+        } else {
+          statusDot.className = 'status-dot';
+          statusText.textContent = 'Active';
+        }
+        
+        // Show the message as a toast
+        this.showToast(lastMessage.message, lastMessage.type);
+      } else {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Active';
       }
     }
   }
@@ -587,7 +627,20 @@ class SkoolPopupManager {
       // Send message to content script to refresh
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tabs[0]) {
-        await chrome.tabs.sendMessage(tabs[0].id, { action: 'refreshAnalysis' });
+        // Check if we're on a Skool page
+        const url = tabs[0].url;
+        if (!url || !url.includes('skool.com')) {
+          this.showToast('Please navigate to a Skool community first', 'warning');
+          return;
+        }
+        
+        try {
+          await chrome.tabs.sendMessage(tabs[0].id, { action: 'refreshAnalysis' });
+        } catch (sendError) {
+          console.error('Failed to send message to content script:', sendError);
+          this.showToast('Please refresh the Skool page and try again', 'error');
+          return;
+        }
       }
       
       // Reload data
@@ -693,27 +746,296 @@ class SkoolPopupManager {
     }
   }
 
-  // Filter members by search term
-  filterMembers(searchTerm) {
-    const memberItems = document.querySelectorAll('.member-item');
-    const term = searchTerm.toLowerCase();
+  // Perform member search with GO button
+  async performMemberSearch() {
+    const searchInput = document.getElementById('member-search');
+    const goButton = document.getElementById('search-go-button');
     
-    memberItems.forEach(item => {
-      const memberName = item.querySelector('.member-name').textContent.toLowerCase();
-      item.style.display = memberName.includes(term) ? 'block' : 'none';
+    if (!searchInput) return;
+    
+    const searchTerm = searchInput.value.trim();
+    
+    // Disable button while searching
+    if (goButton) {
+      goButton.disabled = true;
+      goButton.textContent = 'Searching...';
+    }
+    
+    try {
+      if (searchTerm) {
+        this.showToast(`Searching for "${searchTerm}"...`, 'info');
+        await this.searchSpecificMember(searchTerm);
+      } else {
+        // No search term - use default filters (last 30 days)
+        this.showToast('Loading members with default filters...', 'info');
+        await this.updateMembersList();
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+      this.showToast('Search failed', 'error');
+    } finally {
+      // Re-enable button
+      if (goButton) {
+        goButton.disabled = false;
+        goButton.textContent = 'GO';
+      }
+    }
+  }
+
+  // Search for a specific member
+  async searchSpecificMember(searchTerm) {
+    const members = await this.getFilteredMembers({
+      searchTerm: searchTerm.toLowerCase(),
+      timeframe: this.getTimeframeFilter()
+    });
+    
+    this.renderMembersList(members);
+    
+    if (members.length === 0) {
+      this.showToast(`No members found matching "${searchTerm}"`, 'warning');
+    } else {
+      this.showToast(`Found ${members.length} member(s) matching "${searchTerm}"`, 'success');
+    }
+  }
+
+  // Update members list with current filters
+  async updateMembersList() {
+    const qualityFilter = document.getElementById('quality-filter')?.value;
+    const sortFilter = document.getElementById('sort-filter')?.value;
+    const timeframeFilter = document.getElementById('timeframe-filter')?.value;
+    const searchTerm = document.getElementById('member-search')?.value?.trim().toLowerCase();
+    
+    try {
+      const members = await this.getFilteredMembers({
+        searchTerm,
+        quality: qualityFilter,
+        sort: sortFilter,
+        timeframe: timeframeFilter
+      });
+      
+      this.renderMembersList(members);
+      
+    } catch (error) {
+      console.error('Failed to update members list:', error);
+      this.showEmptyMembersList('Failed to load members');
+    }
+  }
+
+  // Get filtered members based on criteria
+  async getFilteredMembers(filters = {}) {
+    const members = Object.values(this.memberData);
+    let filteredMembers = [...members];
+    
+    // Apply search term filter
+    if (filters.searchTerm && filters.searchTerm.length > 0) {
+      filteredMembers = filteredMembers.filter(member => 
+        member.username?.toLowerCase().includes(filters.searchTerm) ||
+        member.displayName?.toLowerCase().includes(filters.searchTerm)
+      );
+    }
+    
+    // Apply quality filter
+    if (filters.quality && filters.quality !== 'all') {
+      filteredMembers = filteredMembers.filter(member => {
+        const quality = this.getQualityLevel(member.qualityScore || 0);
+        return quality === filters.quality;
+      });
+    }
+    
+    // Apply timeframe filter
+    const timeframe = filters.timeframe || '30';
+    const now = Date.now();
+    filteredMembers = filteredMembers.filter(member => {
+      if (!member.lastSeen) return false;
+      
+      const daysSinceLastSeen = (now - member.lastSeen) / (24 * 60 * 60 * 1000);
+      
+      switch (timeframe) {
+        case '30':
+          return daysSinceLastSeen <= 30;
+        case '90':
+          return daysSinceLastSeen > 30 && daysSinceLastSeen <= 90;
+        case 'older':
+          return daysSinceLastSeen > 90;
+        default:
+          return true;
+      }
+    });
+    
+    // Apply sorting
+    const sortBy = filters.sort || 'score-desc';
+    filteredMembers.sort((a, b) => {
+      switch (sortBy) {
+        case 'score-desc':
+          return (b.qualityScore || 0) - (a.qualityScore || 0);
+        case 'score-asc':
+          return (a.qualityScore || 0) - (b.qualityScore || 0);
+        default:
+          return (b.lastSeen || 0) - (a.lastSeen || 0);
+      }
+    });
+    
+    // Limit results for performance (max 50 members)
+    return filteredMembers.slice(0, 50);
+  }
+
+  // Render members list in the UI
+  renderMembersList(members) {
+    const membersList = document.getElementById('members-list');
+    if (!membersList) return;
+    
+    if (!members || members.length === 0) {
+      this.showEmptyMembersList();
+      return;
+    }
+    
+    const membersHTML = members.map(member => this.createMemberItemHTML(member)).join('');
+    membersList.innerHTML = membersHTML;
+    
+    // Add click handlers for member items
+    membersList.querySelectorAll('.member-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const userId = item.getAttribute('data-user-id');
+        if (userId) {
+          this.showMemberDetails(userId);
+        }
+      });
     });
   }
 
-  // Filter members by quality
-  filterMembersByQuality(quality) {
-    // This would need to be implemented based on the current display
-    this.updateMembersList();
+  // Create HTML for a member item
+  createMemberItemHTML(member) {
+    const quality = this.getQualityLevel(member.qualityScore || 0);
+    const qualityIcon = this.getQualityIcon(quality);
+    const postCount = member.posts ? member.posts.length : 0;
+    const avgPostLength = this.getAveragePostLength(member);
+    const lastSeen = this.getTimeAgo(member.lastSeen);
+    const confidence = Math.round((member.confidenceLevel || 0) * 100);
+    
+    return `
+      <div class="member-item" data-user-id="${member.userId}">
+        <div class="member-info">
+          <div class="member-name">${this.escapeHtml(member.username || member.displayName || 'Unknown User')}</div>
+          <div class="member-stats">${postCount} posts • Avg ${avgPostLength} chars • Last seen ${lastSeen}</div>
+        </div>
+        <div class="member-quality">
+          <div class="quality-badge ${quality}">${qualityIcon}</div>
+          <div class="quality-score">${member.qualityScore || 0} (${confidence}%)</div>
+        </div>
+      </div>
+    `;
   }
 
-  // Sort members
-  sortMembers(sortBy) {
-    // This would need to be implemented based on the current display
-    this.updateMembersList();
+  // Show empty state for members list
+  showEmptyMembersList(message = null) {
+    const membersList = document.getElementById('members-list');
+    if (!membersList) return;
+    
+    const defaultMessage = "No members found matching your criteria. Try adjusting your filters or search term.";
+    
+    membersList.innerHTML = `
+      <div class="empty-state">
+        <h3>No Members Found</h3>
+        <p>${message || defaultMessage}</p>
+      </div>
+    `;
+  }
+
+  // Get timeframe filter value
+  getTimeframeFilter() {
+    return document.getElementById('timeframe-filter')?.value || '30';
+  }
+
+  // Get quality level from score
+  getQualityLevel(score) {
+    if (score >= 75) return 'high';
+    if (score >= 50) return 'moderate';
+    if (score >= 25) return 'suspicious';
+    return 'unknown';
+  }
+
+  // Get quality icon
+  getQualityIcon(quality) {
+    const icons = {
+      high: '✓',
+      moderate: '~',
+      suspicious: '!',
+      unknown: '?'
+    };
+    return icons[quality] || '?';
+  }
+
+  // Show detailed member information in modal
+  showMemberDetails(userId) {
+    const member = this.memberData[userId];
+    if (!member) return;
+    
+    const modal = document.getElementById('member-modal');
+    const modalBody = document.getElementById('modal-body');
+    const modalTitle = document.getElementById('modal-member-name');
+    
+    if (!modal || !modalBody || !modalTitle) return;
+    
+    modalTitle.textContent = member.username || member.displayName || 'Unknown User';
+    
+    const quality = this.getQualityLevel(member.qualityScore || 0);
+    const qualityIcon = this.getQualityIcon(quality);
+    const confidence = Math.round((member.confidenceLevel || 0) * 100);
+    
+    modalBody.innerHTML = `
+      <div class="member-details">
+        <div class="detail-section">
+          <h3>Quality Assessment</h3>
+          <div class="quality-info">
+            <span class="quality-badge ${quality}">${qualityIcon}</span>
+            <span class="quality-text">${quality.charAt(0).toUpperCase() + quality.slice(1)} Quality</span>
+            <span class="quality-score">Score: ${member.qualityScore || 0}/100</span>
+            <span class="confidence-level">Confidence: ${confidence}%</span>
+          </div>
+        </div>
+        
+        <div class="detail-section">
+          <h3>Activity Summary</h3>
+          <div class="activity-stats">
+            <div class="stat">
+              <span class="stat-label">Total Posts:</span>
+              <span class="stat-value">${member.posts ? member.posts.length : 0}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Average Post Length:</span>
+              <span class="stat-value">${this.getAveragePostLength(member)} characters</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Last Seen:</span>
+              <span class="stat-value">${this.getTimeAgo(member.lastSeen)}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">First Seen:</span>
+              <span class="stat-value">${this.getTimeAgo(member.firstSeen)}</span>
+            </div>
+          </div>
+        </div>
+        
+        ${member.posts && member.posts.length > 0 ? `
+        <div class="detail-section">
+          <h3>Recent Posts</h3>
+          <div class="recent-posts">
+            ${member.posts.slice(0, 3).map(post => `
+              <div class="post-preview">
+                <div class="post-content">${this.truncateText(post.content || '', 150)}</div>
+                <div class="post-meta">
+                  <span class="post-time">${this.formatDate(post.timestamp)}</span>
+                  <span class="post-length">${post.content?.length || 0} chars</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+    
+    modal.classList.add('active');
   }
 
   // Open help documentation
@@ -741,12 +1063,13 @@ class SkoolPopupManager {
 
     toastContainer.appendChild(toast);
 
-    // Auto remove after 3 seconds
+    // Auto remove after 3 seconds (5 seconds for warnings/errors)
+    const timeout = (type === 'warning' || type === 'error') ? 5000 : 3000;
     setTimeout(() => {
       if (toast.parentNode) {
         toast.parentNode.removeChild(toast);
       }
-    }, 3000);
+    }, timeout);
   }
 
   // Utility functions

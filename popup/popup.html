@@ -85,21 +85,29 @@
             <!-- Members Tab -->
             <div id="members-tab" class="tab-content">
                 <div class="search-container">
-                    <input type="text" id="member-search" placeholder="Search members..." class="search-input">
+                    <div class="search-row">
+                        <input type="text" id="member-search" placeholder="Search specific member..." class="search-input">
+                        <button id="search-go-button" class="go-button">GO</button>
+                    </div>
                     <div class="filter-options">
                         <select id="quality-filter" class="filter-select">
-                            <option value="all">All Qualities</option>
                             <option value="high">High Quality</option>
                             <option value="moderate">Moderate</option>
                             <option value="suspicious">Suspicious</option>
                             <option value="unknown">Unknown</option>
                         </select>
                         <select id="sort-filter" class="filter-select">
-                            <option value="recent">Most Recent</option>
                             <option value="score-desc">Highest Score</option>
                             <option value="score-asc">Lowest Score</option>
-                            <option value="posts-desc">Most Posts</option>
                         </select>
+                        <select id="timeframe-filter" class="filter-select">
+                            <option value="30">Last 30 days</option>
+                            <option value="90">30-90 days ago</option>
+                            <option value="older">Older than 90 days</option>
+                        </select>
+                    </div>
+                    <div class="filter-description">
+                        <p>Enter a member name and click GO, or leave blank to use default filters (last 30 days)</p>
                     </div>
                 </div>
 

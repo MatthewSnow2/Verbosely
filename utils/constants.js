@@ -1,27 +1,81 @@
 // Constants for Skool Quality Detector Extension
 
 const SKOOL_SELECTORS = {
-  // Core post elements
-  posts: '[data-testid="post"], .post-item, .feed-item',
-  postContent: '.post-content, .feed-item-content, [data-testid="post-content"]',
-  postAuthor: '.post-author, .author-name, [data-testid="post-author"]',
-  postTimestamp: '.post-timestamp, .timestamp, [data-testid="post-timestamp"]',
+  // Core post elements - Updated based on actual Skool DOM structure
+  posts: [
+    // Primary feed item containers that contain user profile links
+    'div:has(a[href*="/@"])', // Any div containing a user profile link
+    '[data-testid*="post"]',
+    'article', 
+    '[role="article"]',
+    // Look for containers with both user links and content
+    'li:has(a[href*="/@"]):has(p)',
+    'div[class*="post"]',
+    'div[class*="feed"]',
+    'li[class*="feed"]',
+    // Fallback: any element with user profile link and substantial text content
+    '*:has(a[href*="/@"]):has([text-content-length>20])',
+    '.post-item', 
+    '.feed-item'
+  ],
+  
+  postContent: [
+    '[data-testid*="content"]',
+    '.post-content', 
+    '.feed-item-content',
+    'p:not([class*="meta"]):not([class*="timestamp"])', // Regular paragraphs, not metadata
+    'div[class*="content"]:not([class*="meta"])',
+    'div:has(> p)',
+    'span:not([class*="meta"]):not([class*="timestamp"])'
+  ],
+  
+  postAuthor: [
+    'a[href*="/@"]', // Skool user profile links - most reliable
+    'a[href^="/user/"]', // Alternative user link format
+    '[data-testid*="author"]',
+    '[data-testid*="user"]',
+    '.post-author', 
+    '.author-name',
+    '.user-name',
+    'div[class*="author"]',
+    'span[class*="name"]',
+    'span[class*="user"]',
+    // Look for clickable text elements that might be usernames
+    'a strong',
+    'a span',
+    'strong a',
+    'span a',
+    'strong',
+    'b',
+    'h3',
+    'h4'
+  ],
+  
+  postTimestamp: [
+    '[data-testid*="time"]',
+    '.post-timestamp', 
+    '.timestamp',
+    'time',
+    'span[class*="time"]',
+    'div[class*="time"]',
+    'small'
+  ],
   
   // Profile and member elements
-  memberProfile: '.member-profile, .user-profile',
-  memberName: '.member-name, .user-name, .display-name',
-  memberAvatar: '.member-avatar, .user-avatar, .profile-image',
+  memberProfile: ['.member-profile', '.user-profile', 'a[href*="/@"]'],
+  memberName: ['.member-name', '.user-name', '.display-name', 'strong', 'b'],
+  memberAvatar: ['.member-avatar', '.user-avatar', '.profile-image', 'img[alt*="profile"]'],
   
   // Engagement elements
-  comments: '.comment, .reply, [data-testid="comment"]',
-  commentAuthor: '.comment-author, .reply-author',
-  commentContent: '.comment-content, .reply-content',
-  likes: '.like-button, .thumbs-up, [data-testid="like"]',
-  replies: '.reply-button, [data-testid="reply"]',
+  comments: ['.comment', '.reply', '[data-testid*="comment"]', 'div[class*="reply"]'],
+  commentAuthor: ['.comment-author', '.reply-author'],
+  commentContent: ['.comment-content', '.reply-content'],
+  likes: ['.like-button', '.thumbs-up', '[data-testid*="like"]', 'button[class*="like"]'],
+  replies: ['.reply-button', '[data-testid*="reply"]', 'button[class*="reply"]'],
   
   // Navigation and containers
-  feedContainer: '.feed, .posts-container, .content-feed',
-  postContainer: '.post, .feed-item, .content-item'
+  feedContainer: ['.feed', '.posts-container', '.content-feed', 'main', '[role="main"]'],
+  postContainer: ['.post', '.feed-item', '.content-item', 'article', 'li']
 };
 
 const QUALITY_METRICS = {
